@@ -125,9 +125,10 @@ def test_run_happy_path(mock_getenv, mock_get):
 @patch("agents.recon.os.getenv")
 def test_run_missing_challenge_url(mock_getenv):
     mock_getenv.side_effect = lambda key, default="": ""
-    state = make_state()
+    # No challenge_url in state AND no env var — should error
+    state = PipelineState(run_date=date(2026, 5, 26))
     result = run(state)
-    assert any("DEVTO_CHALLENGE_URL" in e for e in result.errors.get("ReconAgent", []))
+    assert any("No challenge URL" in e for e in result.errors.get("ReconAgent", []))
 
 
 @patch("agents.recon.requests.get")
