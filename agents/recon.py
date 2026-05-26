@@ -87,9 +87,9 @@ def _build_feed_path(run_date: date) -> str:
 # ---------------------------------------------------------------------------
 
 def run(state: PipelineState) -> PipelineState:
-    challenge_url = os.getenv("DEVTO_CHALLENGE_URL", "").strip()
+    challenge_url = state.challenge_url or os.getenv("DEVTO_CHALLENGE_URL", "").strip()
     if not challenge_url:
-        state.add_error("ReconAgent", "DEVTO_CHALLENGE_URL is not set")
+        state.add_error("ReconAgent", "No challenge URL in state or DEVTO_CHALLENGE_URL env var")
         return state
 
     api_key = os.getenv("DEVTO_API_KEY", "").strip() or None
