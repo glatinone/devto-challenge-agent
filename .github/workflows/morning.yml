@@ -1,0 +1,37 @@
+name: Morning Pipeline
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # 07:00 WIB (UTC+7 = 00:00 UTC)
+  workflow_dispatch:      # manual trigger for testing
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  morning:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run morning pipeline
+        run: python -m pipelines.morning
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DEVTO_API_KEY: ${{ secrets.DEVTO_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          DEVTO_CHALLENGE_URL: ${{ vars.DEVTO_CHALLENGE_URL }}
+          MODEL_PROVIDER: ${{ vars.MODEL_PROVIDER || 'openai' }}
+          MODEL_NAME: ${{ vars.MODEL_NAME || 'gpt-4o' }}
+          MODEL_MAX_TOKENS: ${{ vars.MODEL_MAX_TOKENS || '4096' }}
+          MODEL_TEMPERATURE: ${{ vars.MODEL_TEMPERATURE || '0.7' }}
