@@ -8,15 +8,6 @@ Run as: python -m pipelines.morning
 import sys
 from datetime import date
 
-# ── DEBUG: trace which challenge.py is actually loaded ────────────────────
-import tools.challenge as _ch
-print(f"[debug] challenge.py path: {_ch.__file__}", flush=True)
-with open(_ch.__file__, encoding="utf-8") as _f:
-    _first = _f.readline().strip() + " | " + _f.readline().strip()
-print(f"[debug] challenge.py first lines: {_first}", flush=True)
-print(f"[debug] has 'discover v4': {'discover v4' in open(_ch.__file__).read()}", flush=True)
-# ── END DEBUG ─────────────────────────────────────────────────────────────
-
 from agents.morning_agent import run as agent_run
 
 
