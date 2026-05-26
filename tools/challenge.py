@@ -59,13 +59,18 @@ def _extract_slugs(html: str) -> list[str]:
 
 def _discover_via_devteam_api() -> list[str]:
     """
-    Fallback: scan recent devteam articles for challenge slug mentions.
-    DEV publishes challenge announcement posts that link to /challenges/<slug>.
+    Fallback: fetch full bodies of recent devteam announcement articles and
+    extract /challenges/<slug> links from them.
+
+    Why full bodies: the listing endpoint (/api/articles?username=devteam)
+    does NOT include body_html — it must be fetched per article via
+    /api/articles/{id}. Challenge announcement posts always link to the
+    challenge page in their body.
     """
     try:
         r = requests.get(
             f"{_API_BASE}/articles",
-            params={"username": "devteam", "per_page": 10},
+            params={"username": "devteam", "per_page": 20},
             headers=_api_headers(),
             timeout=15,
         )
@@ -74,15 +79,29 @@ def _discover_via_devteam_api() -> list[str]:
     except requests.RequestException:
         return []
 
-    slugs = []
+    slugs: list[str] = []
     for article in articles:
-        # Check title, description, and body_html for challenge path mentions
-        text = " ".join([
-            article.get("title", ""),
-            article.get("description", ""),
-            article.get("body_html", ""),
-        ])
-        found = re.findall(r'["\'/]challenges/([a-z0-9][a-z0-9-]{2,})', text)
+        title = article.get("title", "").lower()
+        # Only bother fetching full body for challenge-related posts
+        if not any(w in title for w in ("challenge", "hackathon", "contest", "writing")):
+            continue
+
+        article_id = article.get("id")
+        if not article_id:
+            continue
+
+        try:
+            r2 = requests.get(
+                f"{_API_BASE}/articles/{article_id}",
+                headers=_api_headers(),
+                timeout=15,
+            )
+            r2.raise_for_status()
+            body = r2.json().get("body_html", "") or ""
+        except requests.RequestException:
+            continue
+
+        found = re.findall(r'["\'/]challenges/([a-z0-9][a-z0-9-]{2,})', body)
         for s in found:
             if s not in _SLUG_BLOCKLIST and s not in slugs:
                 slugs.append(s)
