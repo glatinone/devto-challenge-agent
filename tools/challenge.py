@@ -136,29 +136,37 @@ def discover_open_challenge() -> str:
     2. Fallback: scan recent devteam articles via API for challenge announcements
     3. Probe each candidate URL and confirm it's not closed
     """
+    import sys
+    print("[discover v4] starting challenge discovery", flush=True)
+
     # ── 1. Scrape challenges page ──────────────────────────────────────────
     html = _fetch(_CHALLENGES_URL)
-    slugs: list[str] = []
+    print(f"[discover v4] challenges page: {len(html) if html else 0} bytes", flush=True)
 
+    slugs: list[str] = []
     if html:
         slugs = _extract_slugs(html)
+    print(f"[discover v4] slugs from page HTML: {slugs}", flush=True)
 
     # ── 2. Fallback: devteam article API ──────────────────────────────────
     if not slugs:
+        print("[discover v4] falling back to devteam API", flush=True)
         slugs = _discover_via_devteam_api()
+        print(f"[discover v4] slugs from devteam API: {slugs}", flush=True)
 
     if not slugs:
         return (
-            "Could not find any challenge slugs on dev.to/challenges "
-            "or in recent devteam articles. "
-            "The page may require JavaScript to render challenge listings."
+            "DISCOVERY FAILED: no challenge slugs found via page scrape "
+            "or devteam API. Both strategies returned empty."
         )
 
     # ── 3. Probe candidates and confirm open ──────────────────────────────
     for slug in slugs[:10]:
         url = f"https://dev.to/challenges/{slug}"
         page = _fetch(url)
-        if page and _is_open(page):
+        open_status = _is_open(page) if page else False
+        print(f"[discover v4] probing {slug}: page={len(page) if page else 0}b open={open_status}", flush=True)
+        if page and open_status:
             title = _extract_title(page)
             return f"Open challenge found: '{title}' at {url}"
 
