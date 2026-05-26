@@ -14,6 +14,8 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     if: contains(github.event.issue.labels.*.name, 'needs-review')
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - uses: actions/checkout@v4
