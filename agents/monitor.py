@@ -71,9 +71,9 @@ def _determine_status(
 
 
 def run(state: PipelineState) -> PipelineState:
-    challenge_url = os.getenv("DEVTO_CHALLENGE_URL", "").strip()
+    challenge_url = state.challenge_url or os.getenv("DEVTO_CHALLENGE_URL", "").strip()
     if not challenge_url:
-        state.add_error("MonitorAgent", "DEVTO_CHALLENGE_URL is not set")
+        state.add_error("MonitorAgent", "No challenge URL in state or DEVTO_CHALLENGE_URL env var")
         return state
 
     try:
