@@ -1,88 +1,23 @@
 """
-Morning pipeline: MonitorAgent → ReconAgent → AnalystAgent → WriterAgent.
+Morning pipeline: delegates to the autonomous morning agent.
 
-Stops early if challenge is CLOSED or any critical agent produces no output.
+The agent drives its own workflow — tool calls, retries, judging, review requests.
 Run as: python -m pipelines.morning
 """
 
-import os
 import sys
 from datetime import date
 
-from core.state import ChallengeStatus, PipelineState
+from agents.morning_agent import run as agent_run
 
 
-def run() -> PipelineState:
-    state = PipelineState(run_date=date.today())
-    print(f"[morning] {state.run_date} — pipeline start")
-
-    from agents.discovery import run as discovery_run
-
-    state = discovery_run(state)
-    if not state.challenge_url:
-        print("[morning] No open challenge found. Pipeline stopped.")
-        _log_errors(state, "DiscoveryAgent")
-        return state
-    print(f"[morning] DiscoveryAgent → {state.challenge_url}")
-
-    from agents.monitor import run as monitor_run
-
-    state = monitor_run(state)
-    print(f"[morning] MonitorAgent → {state.challenge_status} ({state.challenge_title})")
-
-    if state.challenge_status == ChallengeStatus.CLOSED:
-        print("[morning] Challenge is CLOSED. Pipeline stopped.")
-        return state
-
-    _log_errors(state, "MonitorAgent")
-
-    from agents.recon import run as recon_run
-
-    state = recon_run(state)
-    print(f"[morning] ReconAgent → {len(state.articles)} articles")
-
-    if not state.articles:
-        print("[morning] No articles fetched. Pipeline stopped.")
-        _log_errors(state, "ReconAgent")
-        return state
-
-    from agents.analyst import run as analyst_run
-
-    state = analyst_run(state)
-    print(f"[morning] AnalystAgent → {len(state.idea_candidates)} ideas")
-
-    if not state.selected_idea:
-        print("[morning] No ideas generated. Pipeline stopped.")
-        _log_errors(state, "AnalystAgent")
-        return state
-
-    print(f"[morning] Selected: \"{state.selected_idea.title}\"")
-
-    from agents.writer import run as writer_run
-
-    state = writer_run(state)
-
-    if state.draft:
-        print(
-            f"[morning] WriterAgent → score {state.draft.score}/40"
-            f" | issue: {state.github_issue_url}"
-        )
-    else:
-        print("[morning] WriterAgent produced no draft")
-
-    _log_errors(state, "WriterAgent")
-    print(f"\n[morning] Summary:\n{state.summary()}")
-    return state
-
-
-def _log_errors(state: PipelineState, agent: str) -> None:
-    for msg in state.errors.get(agent, []):
-        print(f"[morning] {agent} error: {msg}")
+def run() -> str:
+    print(f"[morning] {date.today()} — starting autonomous morning agent")
+    summary = agent_run()
+    print(f"[morning] Agent complete:\n{summary}")
+    return summary
 
 
 if __name__ == "__main__":
-    result = run()
-    critical_failure = (
-        not result.draft and result.challenge_status != ChallengeStatus.CLOSED
-    )
-    sys.exit(1 if critical_failure else 0)
+    run()
+    sys.exit(0)
