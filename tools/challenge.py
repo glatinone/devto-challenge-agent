@@ -10,7 +10,6 @@ import requests
 
 _CHALLENGES_URL = "https://dev.to/challenges"
 _API_BASE = "https://dev.to/api"
-# Browser-like UA — plain Python UA gets blocked or gets a stripped response
 _HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -22,16 +21,19 @@ _HEADERS = {
 }
 _SLUG_BLOCKLIST = {"terms", "privacy", "contact", "rules", "faq", "about", "challenges"}
 
+# Keep old name as alias so existing tests don't break
+discover_open_challenge = None  # replaced below after definition
+
 
 def _api_headers() -> dict:
-    h = dict(_HEADERS)
+    h = {"User-Agent": _HEADERS["User-Agent"], "Accept": "application/json"}
     key = os.getenv("DEVTO_API_KEY", "").strip()
     if key:
         h["api-key"] = key
     return h
 
 
-def _fetch(url: str) -> Optional[str]:
+def _fetch_html(url: str) -> Optional[str]:
     try:
         r = requests.get(url, timeout=15, headers=_HEADERS)
         r.raise_for_status()
@@ -40,79 +42,12 @@ def _fetch(url: str) -> Optional[str]:
         return None
 
 
-def _extract_slugs(html: str) -> list[str]:
-    """
-    Extract challenge slugs from anywhere in the page source —
-    href attributes, JSON script tags, data-props, JS bundles, all of it.
-    Forem (dev.to) may embed challenge data as JSON inside <script> tags
-    rather than as plain <a href> links, so we search the whole document.
-    """
-    raw = re.findall(r'["\'/]challenges/([a-z0-9][a-z0-9-]{2,})', html)
-    seen: set[str] = set()
-    result = []
-    for s in raw:
-        if s not in seen and s not in _SLUG_BLOCKLIST:
-            seen.add(s)
-            result.append(s)
-    return result
-
-
-def _discover_via_devteam_api() -> list[str]:
-    """
-    Fallback: fetch full bodies of recent devteam announcement articles and
-    extract /challenges/<slug> links from them.
-
-    Why full bodies: the listing endpoint (/api/articles?username=devteam)
-    does NOT include body_html — it must be fetched per article via
-    /api/articles/{id}. Challenge announcement posts always link to the
-    challenge page in their body.
-    """
-    try:
-        r = requests.get(
-            f"{_API_BASE}/articles",
-            params={"username": "devteam", "per_page": 20},
-            headers=_api_headers(),
-            timeout=15,
-        )
-        r.raise_for_status()
-        articles = r.json()
-    except requests.RequestException:
-        return []
-
-    slugs: list[str] = []
-    for article in articles:
-        title = article.get("title", "").lower()
-        # Only bother fetching full body for challenge-related posts
-        if not any(w in title for w in ("challenge", "hackathon", "contest", "writing")):
-            continue
-
-        article_id = article.get("id")
-        if not article_id:
-            continue
-
-        try:
-            r2 = requests.get(
-                f"{_API_BASE}/articles/{article_id}",
-                headers=_api_headers(),
-                timeout=15,
-            )
-            r2.raise_for_status()
-            body = r2.json().get("body_html", "") or ""
-        except requests.RequestException:
-            continue
-
-        found = re.findall(r'["\'/]challenges/([a-z0-9][a-z0-9-]{2,})', body)
-        for s in found:
-            if s not in _SLUG_BLOCKLIST and s not in slugs:
-                slugs.append(s)
-
-    return slugs
-
-
 def _is_open(html: str) -> bool:
     lower = html.lower()
-    closed = ["submissions closed", "challenge is closed", "no longer accepting",
-              "submission period has ended", "challenge has ended"]
+    closed = [
+        "submissions closed", "challenge is closed", "no longer accepting",
+        "submission period has ended", "challenge has ended",
+    ]
     return not any(m in lower for m in closed)
 
 
@@ -124,53 +59,120 @@ def _extract_title(html: str) -> str:
     return m.group(1).split("|")[0].strip() if m else "Unknown Challenge"
 
 
-# ── Tool functions (called by the agent) ──────────────────────────────────
+def _slugs_from_text(text: str) -> list[str]:
+    raw = re.findall(r'["\'/]challenges/([a-z0-9][a-z0-9-]{2,})', text)
+    seen: set[str] = set()
+    result = []
+    for s in raw:
+        if s not in seen and s not in _SLUG_BLOCKLIST:
+            seen.add(s)
+            result.append(s)
+    return result
 
-def discover_open_challenge() -> str:
+
+def _probe_slug(slug: str) -> Optional[tuple[str, str]]:
+    """Return (url, title) if slug points to an open challenge, else None."""
+    url = f"https://dev.to/challenges/{slug}"
+    page = _fetch_html(url)
+    if page and _is_open(page):
+        return url, _extract_title(page)
+    return None
+
+
+# ── Tool function ─────────────────────────────────────────────────────────
+
+def find_current_challenge() -> str:
     """
-    Autonomously find the currently open dev.to challenge.
+    Autonomously find the currently active dev.to challenge.
 
-    Strategy (in order):
-    1. Scrape dev.to/challenges — search the entire page source for
-       /challenges/<slug> patterns (covers href, JSON blobs, data-props, etc.)
-    2. Fallback: scan recent devteam articles via API for challenge announcements
-    3. Probe each candidate URL and confirm it's not closed
+    Three-stage strategy:
+    1. Scrape dev.to/challenges page — works if any SSR content is present
+    2. Query devteam's 50 most recent articles via API and fetch full bodies
+       for challenge-related posts (challenge announcements ALWAYS link to
+       the /challenges/<slug> page in their body)
+    3. Probe each found slug to confirm the page is still open
+
+    Returns a string like:
+      "Active challenge: 'Title' at https://dev.to/challenges/slug"
+    or a descriptive failure message.
     """
-    import sys
-    print("[discover v4] starting challenge discovery", flush=True)
-
-    # ── 1. Scrape challenges page ──────────────────────────────────────────
-    html = _fetch(_CHALLENGES_URL)
-    print(f"[discover v4] challenges page: {len(html) if html else 0} bytes", flush=True)
+    print("[challenge] find_current_challenge v5 — starting", flush=True)
 
     slugs: list[str] = []
-    if html:
-        slugs = _extract_slugs(html)
-    print(f"[discover v4] slugs from page HTML: {slugs}", flush=True)
 
-    # ── 2. Fallback: devteam article API ──────────────────────────────────
+    # ── Stage 1: challenges listing page (may be JS-rendered) ─────────────
+    html = _fetch_html(_CHALLENGES_URL)
+    print(f"[challenge] stage1 page: {len(html) if html else 0} bytes", flush=True)
+    if html:
+        slugs = _slugs_from_text(html)
+    print(f"[challenge] stage1 slugs: {slugs}", flush=True)
+
+    # ── Stage 2: devteam API — fetch full bodies of recent articles ────────
     if not slugs:
-        print("[discover v4] falling back to devteam API", flush=True)
-        slugs = _discover_via_devteam_api()
-        print(f"[discover v4] slugs from devteam API: {slugs}", flush=True)
+        print("[challenge] stage2: querying devteam API", flush=True)
+        try:
+            r = requests.get(
+                f"{_API_BASE}/articles",
+                params={"username": "devteam", "per_page": 50},
+                headers=_api_headers(),
+                timeout=15,
+            )
+            r.raise_for_status()
+            articles = r.json()
+            print(f"[challenge] stage2: got {len(articles)} devteam articles", flush=True)
+        except requests.RequestException as exc:
+            articles = []
+            print(f"[challenge] stage2 API error: {exc}", flush=True)
+
+        for article in articles:
+            url_slug = article.get("url", "").lower()
+            title = article.get("title", "").lower()
+            # Any article that looks challenge-related
+            if not any(w in url_slug or w in title
+                       for w in ("challenge", "hackathon", "contest")):
+                continue
+
+            article_id = article.get("id")
+            if not article_id:
+                continue
+            try:
+                r2 = requests.get(
+                    f"{_API_BASE}/articles/{article_id}",
+                    headers=_api_headers(),
+                    timeout=15,
+                )
+                r2.raise_for_status()
+                body = r2.json().get("body_html", "") or ""
+                found = _slugs_from_text(body)
+                print(f"[challenge] stage2 article '{article.get('title','')}': {found}", flush=True)
+                for s in found:
+                    if s not in slugs:
+                        slugs.append(s)
+            except requests.RequestException:
+                continue
+
+    print(f"[challenge] total candidate slugs: {slugs}", flush=True)
 
     if not slugs:
         return (
-            "DISCOVERY FAILED: no challenge slugs found via page scrape "
-            "or devteam API. Both strategies returned empty."
+            "Challenge discovery failed: dev.to/challenges is JS-rendered "
+            "and no challenge links found in recent devteam articles. "
+            "Check https://dev.to/challenges manually and retry."
         )
 
-    # ── 3. Probe candidates and confirm open ──────────────────────────────
+    # ── Stage 3: probe each candidate ────────────────────────────────────
     for slug in slugs[:10]:
-        url = f"https://dev.to/challenges/{slug}"
-        page = _fetch(url)
-        open_status = _is_open(page) if page else False
-        print(f"[discover v4] probing {slug}: page={len(page) if page else 0}b open={open_status}", flush=True)
-        if page and open_status:
-            title = _extract_title(page)
-            return f"Open challenge found: '{title}' at {url}"
+        result = _probe_slug(slug)
+        if result:
+            url, title = result
+            print(f"[challenge] found open: {url}", flush=True)
+            return f"Active challenge: '{title}' at {url}"
 
-    return "No open challenges found — all candidate pages appear closed"
+    return "No open challenges found — all candidate pages appear closed or inaccessible"
+
+
+# Keep the old name pointing to the new function so nothing breaks
+discover_open_challenge = find_current_challenge
 
 
 def fetch_challenge_feed(challenge_url: str, per_page: int = 50) -> str:
@@ -222,7 +224,9 @@ def fetch_today_metrics(challenge_url: str) -> str:
     if not articles:
         return "No articles published today"
 
-    by_reactions = sorted(articles, key=lambda a: a["positive_reactions_count"], reverse=True)
+    by_reactions = sorted(
+        articles, key=lambda a: a["positive_reactions_count"], reverse=True
+    )
     lines = [f"Today's {len(articles)} articles (sorted by reactions):\n"]
     for i, a in enumerate(by_reactions[:30], 1):
         lines.append(
