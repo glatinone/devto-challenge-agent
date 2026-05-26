@@ -10,8 +10,17 @@ import requests
 
 _CHALLENGES_URL = "https://dev.to/challenges"
 _API_BASE = "https://dev.to/api"
-_HEADERS = {"User-Agent": "devto-challenge-agent/1.0"}
-_SLUG_BLOCKLIST = {"terms", "privacy", "contact", "rules", "faq", "about"}
+# Browser-like UA — plain Python UA gets blocked or gets a stripped response
+_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.5",
+}
+_SLUG_BLOCKLIST = {"terms", "privacy", "contact", "rules", "faq", "about", "challenges"}
 
 
 def _api_headers() -> dict:
@@ -32,11 +41,13 @@ def _fetch(url: str) -> Optional[str]:
 
 
 def _extract_slugs(html: str) -> list[str]:
-    # Match both relative (/challenges/slug) and absolute (https://dev.to/challenges/slug)
-    raw = re.findall(
-        r'href=["\']?(?:https://dev\.to)?/challenges/([a-z0-9][a-z0-9-]*)',
-        html,
-    )
+    """
+    Extract challenge slugs from anywhere in the page source —
+    href attributes, JSON script tags, data-props, JS bundles, all of it.
+    Forem (dev.to) may embed challenge data as JSON inside <script> tags
+    rather than as plain <a href> links, so we search the whole document.
+    """
+    raw = re.findall(r'["\'/]challenges/([a-z0-9][a-z0-9-]{2,})', html)
     seen: set[str] = set()
     result = []
     for s in raw:
@@ -44,6 +55,39 @@ def _extract_slugs(html: str) -> list[str]:
             seen.add(s)
             result.append(s)
     return result
+
+
+def _discover_via_devteam_api() -> list[str]:
+    """
+    Fallback: scan recent devteam articles for challenge slug mentions.
+    DEV publishes challenge announcement posts that link to /challenges/<slug>.
+    """
+    try:
+        r = requests.get(
+            f"{_API_BASE}/articles",
+            params={"username": "devteam", "per_page": 10},
+            headers=_api_headers(),
+            timeout=15,
+        )
+        r.raise_for_status()
+        articles = r.json()
+    except requests.RequestException:
+        return []
+
+    slugs = []
+    for article in articles:
+        # Check title, description, and body_html for challenge path mentions
+        text = " ".join([
+            article.get("title", ""),
+            article.get("description", ""),
+            article.get("body_html", ""),
+        ])
+        found = re.findall(r'["\'/]challenges/([a-z0-9][a-z0-9-]{2,})', text)
+        for s in found:
+            if s not in _SLUG_BLOCKLIST and s not in slugs:
+                slugs.append(s)
+
+    return slugs
 
 
 def _is_open(html: str) -> bool:
@@ -65,42 +109,41 @@ def _extract_title(html: str) -> str:
 
 def discover_open_challenge() -> str:
     """
-    Find the currently open dev.to challenge.
+    Autonomously find the currently open dev.to challenge.
 
-    Priority:
-    1. DEVTO_CHALLENGE_URL env var — if set, trust it and return immediately
-       (use this when the challenges page is JS-rendered and scraping fails)
-    2. Scrape dev.to/challenges for challenge slugs, then probe each one
+    Strategy (in order):
+    1. Scrape dev.to/challenges — search the entire page source for
+       /challenges/<slug> patterns (covers href, JSON blobs, data-props, etc.)
+    2. Fallback: scan recent devteam articles via API for challenge announcements
+    3. Probe each candidate URL and confirm it's not closed
     """
-    # ── 1. Env var override (most reliable) ───────────────────────────────
-    override = os.getenv("DEVTO_CHALLENGE_URL", "").strip()
-    if override:
-        # Fetch the page to extract the title, but trust it's open
-        page = _fetch(override)
-        title = _extract_title(page) if page else override.rstrip("/").split("/")[-1]
-        return f"Open challenge found: '{title}' at {override}"
-
-    # ── 2. Scrape dev.to/challenges ────────────────────────────────────────
+    # ── 1. Scrape challenges page ──────────────────────────────────────────
     html = _fetch(_CHALLENGES_URL)
-    if not html:
-        return "Error: Could not reach dev.to/challenges"
+    slugs: list[str] = []
 
-    slugs = _extract_slugs(html)
+    if html:
+        slugs = _extract_slugs(html)
+
+    # ── 2. Fallback: devteam article API ──────────────────────────────────
+    if not slugs:
+        slugs = _discover_via_devteam_api()
+
     if not slugs:
         return (
-            "No challenge links found on dev.to/challenges — "
-            "the page may be JS-rendered. "
-            "Set DEVTO_CHALLENGE_URL as a GitHub Actions Variable to override."
+            "Could not find any challenge slugs on dev.to/challenges "
+            "or in recent devteam articles. "
+            "The page may require JavaScript to render challenge listings."
         )
 
-    for slug in slugs[:8]:
+    # ── 3. Probe candidates and confirm open ──────────────────────────────
+    for slug in slugs[:10]:
         url = f"https://dev.to/challenges/{slug}"
         page = _fetch(url)
         if page and _is_open(page):
             title = _extract_title(page)
             return f"Open challenge found: '{title}' at {url}"
 
-    return "No open challenges found — all appear closed"
+    return "No open challenges found — all candidate pages appear closed"
 
 
 def fetch_challenge_feed(challenge_url: str, per_page: int = 50) -> str:
