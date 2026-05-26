@@ -32,7 +32,11 @@ def _fetch(url: str) -> Optional[str]:
 
 
 def _extract_slugs(html: str) -> list[str]:
-    raw = re.findall(r'href=["\']?/challenges/([a-z0-9][a-z0-9-]*)', html)
+    # Match both relative (/challenges/slug) and absolute (https://dev.to/challenges/slug)
+    raw = re.findall(
+        r'href=["\']?(?:https://dev\.to)?/challenges/([a-z0-9][a-z0-9-]*)',
+        html,
+    )
     seen: set[str] = set()
     result = []
     for s in raw:
@@ -60,14 +64,34 @@ def _extract_title(html: str) -> str:
 # ── Tool functions (called by the agent) ──────────────────────────────────
 
 def discover_open_challenge() -> str:
-    """Scrape dev.to/challenges and return the first open challenge URL and title."""
+    """
+    Find the currently open dev.to challenge.
+
+    Priority:
+    1. DEVTO_CHALLENGE_URL env var — if set, trust it and return immediately
+       (use this when the challenges page is JS-rendered and scraping fails)
+    2. Scrape dev.to/challenges for challenge slugs, then probe each one
+    """
+    # ── 1. Env var override (most reliable) ───────────────────────────────
+    override = os.getenv("DEVTO_CHALLENGE_URL", "").strip()
+    if override:
+        # Fetch the page to extract the title, but trust it's open
+        page = _fetch(override)
+        title = _extract_title(page) if page else override.rstrip("/").split("/")[-1]
+        return f"Open challenge found: '{title}' at {override}"
+
+    # ── 2. Scrape dev.to/challenges ────────────────────────────────────────
     html = _fetch(_CHALLENGES_URL)
     if not html:
         return "Error: Could not reach dev.to/challenges"
 
     slugs = _extract_slugs(html)
     if not slugs:
-        return "No challenge links found on dev.to/challenges"
+        return (
+            "No challenge links found on dev.to/challenges — "
+            "the page may be JS-rendered. "
+            "Set DEVTO_CHALLENGE_URL as a GitHub Actions Variable to override."
+        )
 
     for slug in slugs[:8]:
         url = f"https://dev.to/challenges/{slug}"
