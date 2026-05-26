@@ -13,11 +13,17 @@ from core.state import PipelineState
 
 
 def run() -> PipelineState:
-    state = PipelineState(
-        run_date=date.today(),
-        challenge_url=os.getenv("DEVTO_CHALLENGE_URL", ""),
-    )
+    state = PipelineState(run_date=date.today())
     print(f"[evening] {state.run_date} — pipeline start")
+
+    from agents.discovery import run as discovery_run
+
+    state = discovery_run(state)
+    if not state.challenge_url:
+        print("[evening] No open challenge found. Pipeline stopped.")
+        _log_errors(state, "DiscoveryAgent")
+        return state
+    print(f"[evening] DiscoveryAgent → {state.challenge_url}")
 
     from agents.scraper import run as scraper_run
 
