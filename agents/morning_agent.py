@@ -7,7 +7,7 @@ how to sequence the two articles. Python only provides tools and a goal.
 
 from core.agent_loop import AgentLoop, Tool
 from skills.devto_writer import STYLE_RULES, RUBRIC
-from tools.challenge import discover_open_challenge, fetch_challenge_feed
+from tools.challenge import find_current_challenge, fetch_challenge_feed
 from tools.github_tools import request_human_review, save_challenge_state
 from tools.memory import read_memory, update_memory
 from tools.writing import self_judge_draft, write_and_save_draft
@@ -30,7 +30,7 @@ save it again — you already know the content and what to improve.
 GOAL = f"""Today's task: write 2 competitive articles for the open dev.to challenge.
 
 Workflow (decide autonomously, don't wait for instructions):
-1. Discover the open challenge
+1. Call find_current_challenge to discover the active challenge URL and title
 2. Save the challenge state (so the evening agent can find it)
 3. Fetch the challenge feed to understand what angles are already covered
 4. Read memory for saturated angles to avoid and patterns that perform
@@ -49,10 +49,15 @@ If no open challenge is found, explain why and stop."""
 def build_tools() -> list[Tool]:
     return [
         Tool(
-            name="discover_open_challenge",
-            description="Scrape dev.to/challenges to find the currently open challenge. Returns URL and title.",
+            name="find_current_challenge",
+            description=(
+                "Find the currently active dev.to challenge. "
+                "Tries scraping dev.to/challenges, then falls back to searching "
+                "devteam's recent article announcements via API. "
+                "Returns: 'Active challenge: <title> at <url>' or a failure message."
+            ),
             parameters={"type": "object", "properties": {}, "required": []},
-            func=discover_open_challenge,
+            func=find_current_challenge,
         ),
         Tool(
             name="save_challenge_state",
