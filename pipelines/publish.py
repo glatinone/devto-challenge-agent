@@ -11,7 +11,7 @@ from datetime import date
 from core.state import PipelineState
 
 
-_CRITICAL_PATTERNS = ("API error", "not found", "not set", "empty", "parse")
+_CRITICAL_PATTERNS = ("API error", "not found", "not set", "empty", "parse", "Could not extract")
 
 
 def run() -> PipelineState:
