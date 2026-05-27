@@ -9,7 +9,8 @@ from core.agent_loop import AgentLoop, Tool
 from skills.devto_writer import STYLE_RULES, RUBRIC, TOP_WEEK_SCORE
 from tools.challenge import find_current_challenge, fetch_challenge_feed, read_feed_article
 from tools.github_tools import request_human_review, save_challenge_state
-from tools.memory import read_memory, update_memory
+from tools.backlog import add_topics, pop_topic, read_backlog
+from tools.memory import read_memory, read_voice_fingerprint, update_memory
 from tools.writing import self_judge_draft, write_and_save_draft
 
 _PASSING_SCORE = 30   # 30+ = solid. 32+ = top/week candidate. Target 32.
@@ -102,26 +103,43 @@ JUDGE INTERPRETATION:
 
 Workflow:
 1. Call find_current_challenge — get the active challenge URL and title
-2. Save the challenge state with save_challenge_state
-3. Fetch the challenge feed — get titles, reactions, and article IDs of top posts
-4. Read the top 3-5 articles in FULL using read_feed_article (use IDs from feed output).
+2. Call read_voice_fingerprint — load Kiel's approved hooks, quotable lines, and working title
+   formulas. Use these as concrete examples when writing, not just the abstract style rules.
+
+── IF AN ACTIVE CHALLENGE WAS FOUND (challenge mode) ────────────────────────────────
+
+3. Save the challenge state with save_challenge_state
+4. Fetch the challenge feed — get titles, reactions, and article IDs of top posts
+5. Read the top 3-5 articles in FULL using read_feed_article (use IDs from feed output).
    For each article note: the hook style used, the angle taken, code shown, the conclusion drawn.
    This is reconnaissance — you need to know EXACTLY what's already been written, not just topics.
-5. Read memory — avoid saturated angles, lean into performing patterns
-6. For EACH of 2 unique articles (article_number=1, then article_number=2):
+6. Read memory — avoid saturated angles, lean into performing patterns
+7. For EACH of 2 unique articles (article_number=1, then article_number=2):
    a. Choose an angle that fills a real gap in what you just read. The angle must NOT overlap
-      with any article you read in step 4. Pick the angle a senior dev would stop scrolling for.
-      Run through the title formulas — which creates the most irresistible curiosity gap?
+      with any article you read in step 5. Pick the angle a senior dev would stop scrolling for.
+      Run through the title formulas — reference voice_fingerprint working_formulas for what's worked.
    b. Write the complete article following all 6 elements. Run the pre-save checklist.
+      Mirror the approved hook style from read_voice_fingerprint if examples exist.
    c. Call write_and_save_draft
    d. Call self_judge_draft — read composite, weakest_dimension, AND top_week_gaps
    e. If composite < {_PASSING_SCORE} OR "REWRITE:" in suggestion: fix and judge again
    f. If composite is {_PASSING_SCORE}-{TOP_WEEK_SCORE-1}: apply one fix from top_week_gaps, save, judge again
    g. Call request_human_review with final score and breakdown
-7. Update memory with feed observations
-8. Summarize: titles chosen, final scores, which title formula used, why each is competitive
+8. Update memory with feed observations
+9. Summarize: titles chosen, final scores, which title formula used, why each is competitive
 
-If no open challenge is found, explain the failure and stop."""
+── IF NO ACTIVE CHALLENGE WAS FOUND (freeform mode) ────────────────────────────────
+
+3. Call read_backlog — see available topic ideas
+4. Call pop_topic — claim the first topic (removes it so tomorrow's run gets a new one)
+5. Write 1 article on the claimed topic using the SAME quality standards as challenge mode:
+   — Same 6 required elements, same pre-save checklist, same scoring threshold
+   — article_number=1
+6. Call self_judge_draft, iterate until composite >= {_PASSING_SCORE}
+7. Call request_human_review with final score
+8. Summarize: topic used, final score, title formula chosen, backlog remaining count
+
+────────────────────────────────────────────────────────────────────────────────────"""
 
 
 def build_tools() -> list[Tool]:
@@ -179,6 +197,35 @@ def build_tools() -> list[Tool]:
                 "required": ["article_id"],
             },
             func=read_feed_article,
+        ),
+        Tool(
+            name="read_voice_fingerprint",
+            description=(
+                "Read Kiel's voice fingerprint: approved opening hooks, quotable lines, "
+                "and title formulas from past articles that performed well. "
+                "Call this BEFORE writing — use real examples to calibrate voice, not just rules."
+            ),
+            parameters={"type": "object", "properties": {}, "required": []},
+            func=read_voice_fingerprint,
+        ),
+        Tool(
+            name="read_backlog",
+            description=(
+                "Read the topic backlog for freeform (non-challenge) writing. "
+                "Call this when find_current_challenge returns no active challenge."
+            ),
+            parameters={"type": "object", "properties": {}, "required": []},
+            func=read_backlog,
+        ),
+        Tool(
+            name="pop_topic",
+            description=(
+                "Claim and remove the first topic from the backlog. "
+                "Call ONCE per freeform run before writing. "
+                "Removes the topic so the next run gets a different one."
+            ),
+            parameters={"type": "object", "properties": {}, "required": []},
+            func=pop_topic,
         ),
         Tool(
             name="read_memory",
