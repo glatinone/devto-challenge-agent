@@ -44,13 +44,20 @@ class Tool:
 
 
 class AgentLoop:
-    def __init__(self, tools: list[Tool], system: str, max_iterations: int = 60):
+    def __init__(
+        self,
+        tools: list[Tool],
+        system: str,
+        max_iterations: int = 60,
+        max_tokens: int | None = None,
+    ):
         self.tools = {t.name: t for t in tools}
         self.system = system
         self.max_iterations = max_iterations
         self.provider = os.getenv("MODEL_PROVIDER", "openai").lower()
         self.model = os.getenv("MODEL_NAME", "gpt-4o")
-        self.max_tokens = int(os.getenv("MODEL_MAX_TOKENS", "4096"))
+        # Caller can override max_tokens; otherwise use env var (default 4096)
+        self.max_tokens = max_tokens or int(os.getenv("MODEL_MAX_TOKENS", "4096"))
 
     def run(self, goal: str) -> str:
         print(f"[agent] Starting with {len(self.tools)} tools, model={self.model}")
