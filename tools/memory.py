@@ -1,14 +1,15 @@
 """
-Memory tools: read and update the angle memory files.
+Memory tools: read and update angle memory and voice fingerprint files.
 """
 
 import json
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from core.github_client import GitHubClient
 
 _SATURATED_PATH = "data/memory/angles_saturated.json"
 _PERFORMING_PATH = "data/memory/angles_performing.json"
+_VOICE_PATH = "data/memory/voice_fingerprint.json"
 
 
 def read_memory() -> str:
@@ -107,3 +108,135 @@ def update_memory(
         return f"Error updating memory: {exc}"
 
     return f"Memory updated. Saturated: +{len(saturated_angles)}, Performing: +{len(performing_patterns)}"
+
+
+# ── Voice fingerprint ──────────────────────────────────────────────────────
+
+def read_voice_fingerprint() -> str:
+    """
+    Read Kiel's voice fingerprint: approved hooks, quotable lines,
+    working title formulas, and voice notes from published/performing articles.
+
+    Call this BEFORE writing any article to calibrate your voice against
+    real examples — not just abstract style rules.
+    """
+    try:
+        gh = GitHubClient()
+        raw = gh.read_file(_VOICE_PATH)
+    except Exception as exc:
+        return f"Error reading voice fingerprint: {exc}"
+
+    if not raw:
+        return (
+            "No voice fingerprint yet — this is the first run. "
+            "Write per the system prompt style rules. "
+            "The evening agent will record what works after articles get reactions."
+        )
+
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return "Voice fingerprint file is malformed. Write per system prompt style rules."
+
+    lines = ["=== VOICE FINGERPRINT: Kiel's Approved Style ===\n"]
+
+    hooks = data.get("approved_hooks", [])
+    if hooks:
+        lines.append("APPROVED OPENING HOOKS (first sentences from articles that performed):")
+        for h in hooks[-5:]:
+            lines.append(f'  • "{h["text"]}"')
+            if h.get("article"):
+                lines.append(f'    from: {h["article"]}')
+    else:
+        lines.append("APPROVED HOOKS: none yet — write a strong Specific Moment + Reversal hook.")
+
+    quotes = data.get("quotable_lines", [])
+    lines.append("")
+    if quotes:
+        lines.append("QUOTABLE LINES (screenshot-worthy, stood alone without context):")
+        for q in quotes[-5:]:
+            lines.append(f'  • "{q["text"]}"')
+    else:
+        lines.append("QUOTABLE LINES: none yet — aim for one line that survives screenshot.")
+
+    formulas = data.get("working_formulas", [])
+    lines.append("")
+    if formulas:
+        lines.append("TITLE FORMULAS THAT GOT APPROVED (use these patterns):")
+        for f in formulas:
+            lines.append(f"  Pattern {f['pattern']}: \"{f['example']}\"")
+    else:
+        lines.append("WORKING FORMULAS: none yet — try Pattern A (Cost-Benefit Tension) or C (Number Shock).")
+
+    notes = data.get("voice_notes", [])
+    if notes:
+        lines.append("")
+        lines.append("VOICE NOTES (specific observations about what sounded like Kiel):")
+        for n in notes[-3:]:
+            lines.append(f"  [{n.get('date', '?')}] {n['note']}")
+
+    return "\n".join(lines)
+
+
+def update_voice_fingerprint(
+    approved_hooks: list[str],
+    quotable_lines: list[str],
+    formula_used: str,
+    formula_example: str,
+    notes: str = "",
+) -> str:
+    """
+    Update voice fingerprint after an article performs well (5+ reactions).
+
+    approved_hooks: list of first sentence(s) from the article
+    quotable_lines: lines that stood alone and could be screenshot-shared
+    formula_used: which title pattern was used (A/B/C/D/E)
+    formula_example: the actual title text
+    notes: any specific observation about what sounded authentic vs AI-generated
+    """
+    try:
+        gh = GitHubClient()
+        raw = gh.read_file(_VOICE_PATH)
+        data = json.loads(raw) if raw else {
+            "approved_hooks": [],
+            "quotable_lines": [],
+            "working_formulas": [],
+            "voice_notes": [],
+        }
+        today = date.today().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
+
+        for hook in approved_hooks:
+            data.setdefault("approved_hooks", []).append({"text": hook, "date": today})
+        data["approved_hooks"] = data["approved_hooks"][-20:]  # keep last 20
+
+        for line in quotable_lines:
+            data.setdefault("quotable_lines", []).append({"text": line, "date": today})
+        data["quotable_lines"] = data["quotable_lines"][-20:]
+
+        existing_examples = {f["example"] for f in data.get("working_formulas", [])}
+        if formula_example and formula_example not in existing_examples:
+            data.setdefault("working_formulas", []).append({
+                "pattern": formula_used,
+                "example": formula_example,
+                "date": today,
+            })
+
+        if notes:
+            data.setdefault("voice_notes", []).append({"note": notes, "date": today})
+            data["voice_notes"] = data["voice_notes"][-10:]
+
+        data["updated_at"] = now
+        gh.commit_file(
+            _VOICE_PATH,
+            json.dumps(data, indent=2),
+            f"data: voice fingerprint — +{len(approved_hooks)} hooks, +{len(quotable_lines)} quotes",
+        )
+        return (
+            f"Voice fingerprint updated: "
+            f"+{len(approved_hooks)} hooks, "
+            f"+{len(quotable_lines)} quotable lines, "
+            f"formula {formula_used} recorded."
+        )
+    except Exception as exc:
+        return f"Error updating voice fingerprint: {exc}"
