@@ -29,21 +29,31 @@ save it again — you already know the content and what to improve.
 
 GOAL = f"""Today's task: write 2 competitive articles for the open dev.to challenge.
 
-Workflow (decide autonomously, don't wait for instructions):
-1. Call find_current_challenge to discover the active challenge URL and title
-2. Save the challenge state (so the evening agent can find it)
-3. Fetch the challenge feed to understand what angles are already covered
-4. Read memory for saturated angles to avoid and patterns that perform
-5. For each of 2 unique angles (no repeats, fill real gaps):
-   a. Write the full article (900-1400 words, no bullet points, no em dashes)
-   b. Save it with write_and_save_draft (use article_number=1 for first, 2 for second)
-   c. Judge it with self_judge_draft
-   d. If score < {_PASSING_SCORE}: rewrite and save again (same article_number)
-   e. Request human review
-6. Update memory with what you observed about the feed
-7. Summarize what you did
+CRITICAL RULES — read before starting:
+- Every article MUST be 900-1400 words. The tool will REJECT anything under 900.
+- Score < {_PASSING_SCORE}/40 means you MUST rewrite immediately — no exceptions.
+- Never publish a draft that was rejected for word count or scored below {_PASSING_SCORE}.
+- Write like a senior developer who lived through this problem, not like a tutorial.
 
-If no open challenge is found, explain why and stop."""
+Workflow:
+1. Call find_current_challenge — get the active challenge URL and title
+2. Save the challenge state with save_challenge_state
+3. Fetch the challenge feed — understand what angles are already covered (avoid repeats)
+4. Read memory — avoid saturated angles, lean into performing patterns
+5. For EACH of 2 unique articles (article_number=1, then article_number=2):
+   a. Choose a specific angle that fills a real gap in the feed
+   b. Write the COMPLETE article body — minimum 900 words, no bullet points, no em dashes.
+      Start with a hook that names a real problem with real stakes.
+      Include specific numbers, real examples, and at least one counterintuitive insight.
+   c. Call write_and_save_draft — if it returns REJECTED, immediately rewrite with more depth
+   d. Call self_judge_draft — read the score carefully
+   e. If composite < {_PASSING_SCORE} OR improvement_suggestion starts with "REWRITE:":
+      rewrite the article (same article_number), save again, judge again
+   f. Call request_human_review with the final score and breakdown
+6. Update memory with feed observations
+7. Summarize: what angles you chose, final scores, and why they're competitive
+
+If no open challenge is found, explain the failure and stop."""
 
 
 def build_tools() -> list[Tool]:
