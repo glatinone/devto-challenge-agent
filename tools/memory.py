@@ -15,17 +15,54 @@ def read_memory() -> str:
     """Read current angle memory: what's saturated and what's performing."""
     try:
         gh = GitHubClient()
-        saturated = gh.read_file(_SATURATED_PATH)
-        performing = gh.read_file(_PERFORMING_PATH)
+        sat_raw = gh.read_file(_SATURATED_PATH)
+        perf_raw = gh.read_file(_PERFORMING_PATH)
     except Exception as exc:
         return f"Error reading memory: {exc}"
 
-    return (
-        f"=== Saturated angles (avoid) ===\n"
-        f"{saturated or 'None recorded yet.'}\n\n"
-        f"=== Performing patterns (lean into) ===\n"
-        f"{performing or 'None recorded yet.'}"
-    )
+    lines = ["=== MEMORY: Angle Intelligence ===\n"]
+
+    # Saturated angles
+    lines.append("AVOID these saturated angles (overdone in recent feeds):")
+    if sat_raw:
+        try:
+            sat_data = json.loads(sat_raw)
+            angles = sat_data.get("angles", [])
+            if angles:
+                for a in angles:
+                    lines.append(f"  - {a['angle']}")
+            else:
+                lines.append("  (none recorded yet)")
+        except (json.JSONDecodeError, KeyError):
+            lines.append("  (none recorded yet)")
+    else:
+        lines.append("  (none recorded yet)")
+
+    lines.append("")
+
+    # Performing patterns
+    lines.append("LEAN INTO these performing patterns (drove high reactions):")
+    if perf_raw:
+        try:
+            perf_data = json.loads(perf_raw)
+            patterns = perf_data.get("patterns", [])
+            if patterns:
+                for p in patterns:
+                    lines.append(f"  + {p['pattern']}")
+            else:
+                lines.append("  (none recorded yet)")
+
+            # Latest brief
+            briefs = perf_data.get("briefs", [])
+            if briefs:
+                latest = briefs[-1]
+                lines.append(f"\nLatest brief ({latest.get('date', '?')}): {latest.get('text', '')}")
+        except (json.JSONDecodeError, KeyError):
+            lines.append("  (none recorded yet)")
+    else:
+        lines.append("  (none recorded yet)")
+
+    return "\n".join(lines)
 
 
 def update_memory(
