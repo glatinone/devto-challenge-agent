@@ -3,45 +3,90 @@
     {
       "id": 1,
       "title": "The GitHub Action that cost me $340 in a weekend because I forgot one env var",
-      "tags": ["githubactions", "devops", "productivity"],
-      "notes": "Cost shock angle — lead with the specific dollar amount",
+      "tags": [
+        "githubactions",
+        "devops",
+        "productivity"
+      ],
+      "notes": "Cost shock angle \u2014 lead with the specific dollar amount",
       "added_at": "2026-05-27"
     },
     {
       "id": 2,
       "title": "I automated my PR review reminders. On day 4 it caught a bug my team had ignored for 9 days",
-      "tags": ["github", "automation", "productivity"],
-      "notes": "Caught-something angle — the tool finding what humans missed",
+      "tags": [
+        "github",
+        "automation",
+        "productivity"
+      ],
+      "notes": "Caught-something angle \u2014 the tool finding what humans missed",
       "added_at": "2026-05-27"
     },
     {
       "id": 3,
       "title": "Stop writing GitHub Actions like bash scripts. Here is what they actually are",
-      "tags": ["githubactions", "devops", "tutorial"],
-      "notes": "Contrarian — only if backed by evidence about event-driven model",
+      "tags": [
+        "githubactions",
+        "devops",
+        "tutorial"
+      ],
+      "notes": "Contrarian \u2014 only if backed by evidence about event-driven model",
       "added_at": "2026-05-27"
     },
     {
       "id": 4,
       "title": "My deploy pipeline passed all checks at 8am. By noon it had silently failed 3 times",
-      "tags": ["devops", "cicd", "debugging"],
-      "notes": "Specific Moment + Reversal — silent failure is the most underwritten CI/CD angle",
+      "tags": [
+        "devops",
+        "cicd",
+        "debugging"
+      ],
+      "notes": "Specific Moment + Reversal \u2014 silent failure is the most underwritten CI/CD angle",
       "added_at": "2026-05-27"
     },
     {
       "id": 5,
       "title": "I was wrong about monorepos for 2 years. One incident changed it",
-      "tags": ["architecture", "monorepo", "programming"],
-      "notes": "I Was Wrong angle — works best with a specific real incident",
+      "tags": [
+        "architecture",
+        "monorepo",
+        "programming"
+      ],
+      "notes": "I Was Wrong angle \u2014 works best with a specific real incident",
       "added_at": "2026-05-27"
     },
     {
       "id": 6,
       "title": "The one-line config that cut my OpenAI costs by 60 percent",
-      "tags": ["ai", "openai", "productivity"],
-      "notes": "Number Shock — specific percentage with real dollar context",
+      "tags": [
+        "ai",
+        "openai",
+        "productivity"
+      ],
+      "notes": "Number Shock \u2014 specific percentage with real dollar context",
+      "added_at": "2026-05-27"
+    },
+    {
+      "id": 7,
+      "title": "Leveraging GitHub Codespaces for remote development efficiency",
+      "tags": [],
+      "notes": "",
+      "added_at": "2026-05-27"
+    },
+    {
+      "id": 8,
+      "title": "Strategic use of GitHub webhooks in continuous deployment workflows",
+      "tags": [],
+      "notes": "",
+      "added_at": "2026-05-27"
+    },
+    {
+      "id": 9,
+      "title": "Case study: Enhancing code review meetings with GitHub Discussions",
+      "tags": [],
+      "notes": "",
       "added_at": "2026-05-27"
     }
   ],
-  "updated_at": "2026-05-27T00:00:00+00:00"
+  "updated_at": "2026-05-27T17:55:54.677939+00:00"
 }
