@@ -10,6 +10,9 @@ from core.github_client import GitHubClient
 _CHALLENGE_PATH = "data/challenge.json"
 
 
+_MIN_REVIEW_SCORE = 30  # must match morning_agent._PASSING_SCORE
+
+
 def request_human_review(
     draft_path: str,
     title: str,
@@ -20,7 +23,18 @@ def request_human_review(
     """
     Open a GitHub Issue for human review. Kiel closes the issue to approve
     and trigger publishing. Returns the issue URL.
+
+    ENFORCED: score must be >= 30. Below that, the tool refuses and tells the
+    agent exactly what to do next.
     """
+    if score < _MIN_REVIEW_SCORE:
+        return (
+            f"REVIEW BLOCKED — score {score}/40 is below the minimum {_MIN_REVIEW_SCORE}. "
+            f"Do NOT submit this draft for review. "
+            f"Read the improvement_suggestion from self_judge_draft and rewrite the article. "
+            f"Only call request_human_review when composite >= {_MIN_REVIEW_SCORE}."
+        )
+
     body = f"""## Article Draft Ready for Review
 
 **Title:** {title}
