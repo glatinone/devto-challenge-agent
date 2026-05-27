@@ -13,6 +13,10 @@ from core.llm import LLMClient
 from skills.devto_writer import JUDGE_SYSTEM, build_judge_prompt
 
 
+_MIN_WORDS = 900
+_MAX_WORDS = 1400
+
+
 def write_and_save_draft(
     title: str,
     tags: list[str],
@@ -22,10 +26,20 @@ def write_and_save_draft(
     """
     Save a draft to GitHub at drafts/draft_YYYY-MM-DD_{article_number}.md.
 
-    The agent provides the complete article body. This tool adds frontmatter
-    and persists the file. Call with article_number=1 for first article,
-    article_number=2 for second, etc.
+    HARD REQUIREMENT: body_markdown must be 900-1400 words.
+    If under 900 words the draft is REJECTED and the agent must rewrite.
     """
+    word_count = len(body_markdown.split())
+
+    if word_count < _MIN_WORDS:
+        return (
+            f"DRAFT REJECTED — too short: {word_count} words. "
+            f"Minimum is {_MIN_WORDS} words. "
+            f"You must rewrite with {_MIN_WORDS - word_count} more words of depth, "
+            f"examples, code, and specific details. Do NOT call this tool again until "
+            f"the article is at least {_MIN_WORDS} words."
+        )
+
     tags_str = ", ".join(tags[:4])
     content = f"---\ntitle: {title}\ntags: {tags_str}\n---\n\n{body_markdown.strip()}\n"
     path = f"drafts/draft_{date.today().isoformat()}_{article_number}.md"
@@ -40,7 +54,7 @@ def write_and_save_draft(
     except Exception as exc:
         return f"Error saving draft: {exc}"
 
-    return f"Draft saved to {path} ({len(body_markdown.split())} words)"
+    return f"Draft saved to {path} ({word_count} words)"
 
 
 def self_judge_draft(draft_path: str) -> str:
