@@ -26,7 +26,7 @@ _PUBLISHED_LOG_PATH = "published/published_log.json"
 
 def _extract_draft_path(issue_body: str) -> Optional[str]:
     """Parse the draft file path from the issue body written by WriterAgent."""
-    m = re.search(r"`(drafts/draft_[\d-]+\.md)`", issue_body)
+    m = re.search(r"`(drafts/draft_[\d_-]+\.md)`", issue_body)
     return m.group(1) if m else None
 
 
