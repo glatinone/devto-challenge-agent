@@ -48,22 +48,36 @@ BEFORE WRITING — PICK A TITLE USING ONE OF THESE FORMULAS:
   E. Caught-Something: "I Built X. On Day 4 It Caught Something I Had Missed for Weeks."
 Title must be under 80 characters, no em dashes, creates a curiosity gap.
 
-HOW TO WRITE EACH ARTICLE (6 required elements in order):
-  1. HOOK — use one named pattern (Specific Moment + Reversal is strongest).
-     First sentence must be: a specific moment/failure, a real number, or a direct claim.
-     "I broke production for 4 hours on a Tuesday" beats "GitHub is a powerful platform."
-  2. WHAT I BUILT — 2-4 sentences. State the artifact plainly. "I built X. It does Y."
-  3. HOW IT WORKS — two real code blocks (config + logic). Real imports, real APIs.
-     2-3 sentences of plain explanation. No pseudocode in fenced blocks.
-  4. WHAT HAPPENED — narrative arc: frustration then breakthrough.
-     One failure moment (specific). One aha moment (specific).
-     "PR #142, 9 days open, blocking v2.3, colleague pinged twice" beats "an old PR."
-  5. WHAT THIS ACTUALLY TEACHES YOU — generalizable principle.
-     ONE quotable line that stands alone without context (designed to be screenshot-shared).
-     ONE bold/controversial statement (defendable with the evidence in the article).
-  6. CLOSING QUESTION — dual-prompt + author stake pattern:
-     "If you had to give one agent control over X, what would you let it decide, and what
-      would you never hand over? The first answer that surprises me, I'll build it next week."
+HOW TO WRITE EACH ARTICLE — READ THIS CAREFULLY:
+
+WARNING: The numbered elements below are INSTRUCTIONS FOR YOU, not labels to write in
+the article. Do NOT write "**Hook**:" or "### What I Built" or "## The Conflict" in the
+article body. Write PROSE directly. The article must look like a published blog post,
+not a filled-in template. The scanner will REJECT any article with structural labels.
+
+The 6 elements your article must CONTAIN (write as seamless prose, not labeled sections):
+
+  First paragraph: Open with a specific moment, failure, or number that creates urgency.
+  Use Specific Moment + Reversal (strongest): vivid moment → emotional peak → reversal.
+  Example: "My deploy pipeline reported 3 failures at 8 AM Sunday. I felt like a genius.
+  By evening I'd checked the bill and the feeling was gone."
+  First sentence must be specific — NOT "GitHub is a powerful platform" or "Have you ever".
+
+  Second section (no label): 2-4 sentences stating what you built/tested, plainly.
+
+  Third section (no label): Two real code blocks. Real imports, real APIs, not pseudocode.
+  2-3 sentences of explanation between them.
+
+  Fourth section (no label): Narrative arc — frustration, then breakthrough.
+  One specific failure moment. One specific aha moment. Real names, real numbers.
+
+  Fifth section (no label): The generalizable principle — what this means beyond this story.
+  Write ONE sentence that stands alone without context (quotable, screenshot-worthy).
+  Write ONE bold/controversial statement backed by evidence in the article.
+
+  Final paragraph: Closing question with dual-prompt + author stake.
+  "If you had to automate one thing, what would it be — and what would you never automate?
+  The most interesting answer I'll build as my next post and credit you."
 
 PRE-SAVE CHECKLIST (check every item before calling write_and_save_draft):
   [ ] Title uses one of the 5 formula patterns and has a curiosity gap
@@ -232,5 +246,7 @@ def build_tools() -> list[Tool]:
 
 
 def run() -> str:
-    agent = AgentLoop(tools=build_tools(), system=SYSTEM_PROMPT, max_iterations=60)
+    # max_tokens=16384 gives the LLM room to write a full 1000-word article in one pass
+    # without hitting output limits and padding incrementally.
+    agent = AgentLoop(tools=build_tools(), system=SYSTEM_PROMPT, max_iterations=60, max_tokens=16384)
     return agent.run(GOAL)
