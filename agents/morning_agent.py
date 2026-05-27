@@ -7,7 +7,7 @@ how to sequence the two articles. Python only provides tools and a goal.
 
 from core.agent_loop import AgentLoop, Tool
 from skills.devto_writer import STYLE_RULES, RUBRIC, TOP_WEEK_SCORE
-from tools.challenge import find_current_challenge, fetch_challenge_feed
+from tools.challenge import find_current_challenge, fetch_challenge_feed, read_feed_article
 from tools.github_tools import request_human_review, save_challenge_state
 from tools.memory import read_memory, update_memory
 from tools.writing import self_judge_draft, write_and_save_draft
@@ -103,19 +103,23 @@ JUDGE INTERPRETATION:
 Workflow:
 1. Call find_current_challenge — get the active challenge URL and title
 2. Save the challenge state with save_challenge_state
-3. Fetch the challenge feed — understand what angles exist (avoid repeats)
-4. Read memory — avoid saturated angles, lean into performing patterns
-5. For EACH of 2 unique articles (article_number=1, then article_number=2):
-   a. Choose an angle that fills a real gap. Pick the angle that makes a senior dev stop scrolling.
-      Run through the title formulas — which one creates the most irresistible curiosity gap?
+3. Fetch the challenge feed — get titles, reactions, and article IDs of top posts
+4. Read the top 3-5 articles in FULL using read_feed_article (use IDs from feed output).
+   For each article note: the hook style used, the angle taken, code shown, the conclusion drawn.
+   This is reconnaissance — you need to know EXACTLY what's already been written, not just topics.
+5. Read memory — avoid saturated angles, lean into performing patterns
+6. For EACH of 2 unique articles (article_number=1, then article_number=2):
+   a. Choose an angle that fills a real gap in what you just read. The angle must NOT overlap
+      with any article you read in step 4. Pick the angle a senior dev would stop scrolling for.
+      Run through the title formulas — which creates the most irresistible curiosity gap?
    b. Write the complete article following all 6 elements. Run the pre-save checklist.
    c. Call write_and_save_draft
    d. Call self_judge_draft — read composite, weakest_dimension, AND top_week_gaps
    e. If composite < {_PASSING_SCORE} OR "REWRITE:" in suggestion: fix and judge again
    f. If composite is {_PASSING_SCORE}-{TOP_WEEK_SCORE-1}: apply one fix from top_week_gaps, save, judge again
    g. Call request_human_review with final score and breakdown
-6. Update memory with feed observations
-7. Summarize: titles chosen, final scores, which title formula used, why each is competitive
+7. Update memory with feed observations
+8. Summarize: titles chosen, final scores, which title formula used, why each is competitive
 
 If no open challenge is found, explain the failure and stop."""
 
@@ -148,7 +152,7 @@ def build_tools() -> list[Tool]:
         ),
         Tool(
             name="fetch_challenge_feed",
-            description="Fetch the top articles from the challenge feed (last 7 days). Returns list with reactions, author, tags.",
+            description="Fetch the top articles from the challenge feed (last 7 days). Returns list with reactions, author, tags, and article IDs.",
             parameters={
                 "type": "object",
                 "properties": {
@@ -158,6 +162,23 @@ def build_tools() -> list[Tool]:
                 "required": ["challenge_url"],
             },
             func=fetch_challenge_feed,
+        ),
+        Tool(
+            name="read_feed_article",
+            description=(
+                "Read the full body of a single article from the challenge feed. "
+                "Use this BEFORE writing to understand what angles and content already exist. "
+                "Call this for the top 3-5 articles after fetch_challenge_feed returns IDs. "
+                "Returns title, author, reactions, tags, and full article body (truncated to 2000 chars)."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "article_id": {"type": "integer", "description": "Article ID from fetch_challenge_feed output"},
+                },
+                "required": ["article_id"],
+            },
+            func=read_feed_article,
         ),
         Tool(
             name="read_memory",
