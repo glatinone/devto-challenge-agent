@@ -13,8 +13,8 @@ from core.llm import LLMClient
 from skills.devto_writer import JUDGE_SYSTEM, build_judge_prompt
 
 
-_MIN_WORDS = 900
-_MAX_WORDS = 1400
+_MIN_WORDS = 800
+_MAX_WORDS = 1200
 
 
 def write_and_save_draft(
@@ -26,8 +26,9 @@ def write_and_save_draft(
     """
     Save a draft to GitHub at drafts/draft_YYYY-MM-DD_{article_number}.md.
 
-    HARD REQUIREMENT: body_markdown must be 900-1400 words.
-    If under 900 words the draft is REJECTED and the agent must rewrite.
+    HARD REQUIREMENT: body_markdown must be 800-1200 words.
+    Top/week posts cluster at 800 words. Under 800 is REJECTED.
+    Over 1200 is accepted but flagged — depth beats padding.
     """
     word_count = len(body_markdown.split())
 
@@ -35,11 +36,13 @@ def write_and_save_draft(
         return (
             f"DRAFT REJECTED — too short: {word_count} words. "
             f"Minimum is {_MIN_WORDS} words. "
-            f"You must rewrite with {_MIN_WORDS - word_count} more words of depth, "
-            f"examples, code, and specific details. Do NOT call this tool again until "
-            f"the article is at least {_MIN_WORDS} words."
+            f"Rewrite with {_MIN_WORDS - word_count} more words of real substance: "
+            f"a failure moment, real code, specific numbers, a quotable line. "
+            f"Do NOT retry with filler. Do NOT call this tool again until the article "
+            f"is at least {_MIN_WORDS} words of actual content."
         )
 
+    over_limit = word_count > _MAX_WORDS
     tags_str = ", ".join(tags[:4])
     content = f"---\ntitle: {title}\ntags: {tags_str}\n---\n\n{body_markdown.strip()}\n"
     path = f"drafts/draft_{date.today().isoformat()}_{article_number}.md"
@@ -54,7 +57,8 @@ def write_and_save_draft(
     except Exception as exc:
         return f"Error saving draft: {exc}"
 
-    return f"Draft saved to {path} ({word_count} words)"
+    length_note = f" (over {_MAX_WORDS} — consider trimming for better punch)" if over_limit else ""
+    return f"Draft saved to {path} ({word_count} words{length_note})"
 
 
 def self_judge_draft(draft_path: str) -> str:
