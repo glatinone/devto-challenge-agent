@@ -175,33 +175,70 @@ def find_current_challenge() -> str:
 discover_open_challenge = find_current_challenge
 
 
+def _tag_variants(challenge_url: str) -> list[str]:
+    """
+    Generate tag candidates from a challenge URL.
+    e.g. 'github-2026-05-21' → ['github-2026-05-21', 'github', 'finishupathon']
+    The slug itself, the first word before any date/numbers, and common aliases.
+    """
+    slug = challenge_url.rstrip("/").split("/")[-1]
+    variants = [slug]
+    # Strip trailing date pattern like -2026-05-21 or -2026
+    base = re.sub(r"-\d{4}(-\d{2}(-\d{2})?)?$", "", slug)
+    if base and base != slug:
+        variants.append(base)
+    # Some challenges have a short alias (e.g. 'github', 'hermes')
+    short = slug.split("-")[0]
+    if short and short not in variants:
+        variants.append(short)
+    return variants
+
+
 def fetch_challenge_feed(challenge_url: str, per_page: int = 50) -> str:
-    """Fetch top articles from the challenge feed (last 7 days by reactions)."""
-    tag = challenge_url.rstrip("/").split("/")[-1]
-    try:
-        r = requests.get(
-            f"{_API_BASE}/articles",
-            params={"tag": tag, "per_page": per_page, "top": 7},
-            headers=_api_headers(),
-            timeout=15,
-        )
-        r.raise_for_status()
-        articles = r.json()
-    except requests.RequestException as exc:
-        return f"Error fetching feed: {exc}"
+    """
+    Fetch top articles from the challenge feed (last 7 days by reactions).
+
+    Tries multiple tag variations since challenge slugs often differ from
+    the actual dev.to tag used on submitted articles.
+    """
+    tag_candidates = _tag_variants(challenge_url)
+    articles: list = []
+    used_tag = ""
+
+    for tag in tag_candidates:
+        try:
+            r = requests.get(
+                f"{_API_BASE}/articles",
+                params={"tag": tag, "per_page": per_page, "top": 7},
+                headers=_api_headers(),
+                timeout=15,
+            )
+            r.raise_for_status()
+            result = r.json()
+            if result:
+                articles = result
+                used_tag = tag
+                break
+        except requests.RequestException:
+            continue
 
     if not articles:
-        return f"No articles found for tag '{tag}'"
+        return (
+            f"No articles found for any tag variant {tag_candidates}. "
+            f"The challenge feed may be empty (new challenge) or the tag may differ. "
+            f"Write a completely original angle — focus on what a senior developer "
+            f"would want to read about the challenge topic that hasn't been covered yet."
+        )
 
-    lines = [f"Found {len(articles)} articles in '{tag}' challenge feed:\n"]
+    lines = [f"Found {len(articles)} articles in '{used_tag}' challenge feed:\n"]
     for i, a in enumerate(articles[:30], 1):
-        tags = ", ".join(a.get("tag_list", [])[:4])
+        tags_list = ", ".join(a.get("tag_list", [])[:4])
         lines.append(
             f'{i}. "{a["title"]}" by @{a["user"]["username"]} — '
             f'{a["positive_reactions_count"]} reactions, '
             f'{a["comments_count"]} comments, '
             f'{a["reading_time_minutes"]} min read\n'
-            f"   Tags: [{tags}]"
+            f"   Tags: [{tags_list}]"
         )
     return "\n".join(lines)
 
