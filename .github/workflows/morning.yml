@@ -32,8 +32,7 @@ jobs:
           DEVTO_API_KEY: ${{ secrets.DEVTO_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          DEVTO_CHALLENGE_URL: ${{ vars.DEVTO_CHALLENGE_URL }}
           MODEL_PROVIDER: ${{ vars.MODEL_PROVIDER || 'openai' }}
           MODEL_NAME: ${{ vars.MODEL_NAME || 'gpt-4o' }}
-          MODEL_MAX_TOKENS: ${{ vars.MODEL_MAX_TOKENS || '4096' }}
           MODEL_TEMPERATURE: ${{ vars.MODEL_TEMPERATURE || '0.7' }}
+          JUDGE_MODEL_NAME: ${{ vars.JUDGE_MODEL_NAME || 'gpt-4o-mini' }}
