@@ -7,7 +7,7 @@ and how to frame the brief for tomorrow's morning agent.
 
 from core.agent_loop import AgentLoop, Tool
 from tools.backlog import add_topics
-from tools.challenge import fetch_today_metrics
+from tools.challenge import fetch_recent_published_metrics, fetch_today_metrics, read_feed_article
 from tools.github_tools import load_challenge_state
 from tools.memory import read_memory, update_memory, update_voice_fingerprint
 
@@ -25,23 +25,28 @@ GOAL = """Today's task: analyze performance, update memory, and prepare tomorrow
 
 Workflow:
 1. Load the stored challenge state to find today's challenge URL
-2. Fetch today's article metrics
-3. Read current memory for context
-4. Analyze the data:
-   — What hooks, title formulas, and angles drove the highest reactions?
-   — What angles are now overcrowded (3+ articles on same topic)?
-   — What underexplored angles exist that nobody has written about yet?
-5. Update memory with your findings (saturated_angles, performing_patterns, brief)
-6. If any article in today's feed scored 5+ reactions AND used a strong hook or quotable line:
-   — Call update_voice_fingerprint with that article's opening sentence, a quotable line
-     from it (if visible), the title formula it used (A/B/C/D/E), and the actual title.
-   — This builds Kiel's voice fingerprint so tomorrow's agent writes with proven patterns.
-7. Identify 2-3 underexplored angles from the feed that nobody wrote about today:
-   — Call add_topics with those angles as plain-language descriptions.
-   — These become tomorrow's freeform backlog if no challenge is active.
-8. Summarize: top article patterns, voice fingerprint updated (yes/no), topics added to backlog
+2. Fetch today's challenge feed metrics (what is performing in the feed right now)
+3. Fetch recent published metrics — check Kiel's OWN articles from the last 3 days:
+   — These articles needed 24-48h to accumulate real reactions
+   — If any article has 5+ reactions, it is a HIGH PERFORMER
+4. Read current memory for context
+5. Analyze:
+   — In the challenge feed: what hooks, title formulas, angles drove highest reactions?
+   — What angles are overcrowded (3+ articles on same topic)?
+   — What underexplored angles exist nobody wrote about?
+6. Update memory with your findings (saturated_angles, performing_patterns, brief)
+7. For each HIGH PERFORMER from step 3:
+   — Call read_feed_article(article_id) to retrieve the body
+   — Extract: first sentence (hook), one quotable line that stands alone
+   — Identify which title formula (A/B/C/D/E) was used
+   — Call update_voice_fingerprint with those details
+   — This builds Kiel's voice fingerprint from REAL performance data, not guesses
+8. Identify 2-3 underexplored angles from the feed:
+   — Call add_topics with those angles as plain-language descriptions
+9. Summarize: feed patterns, Kiel's article performance, voice fingerprint updated (yes/no),
+   topics added to backlog
 
-Be honest about what the data shows. If reactions are all low, say so — don't pad the brief."""
+Be honest. If all reactions are low, say so. Don't pad the brief with optimism."""
 
 
 def build_tools() -> list[Tool]:
@@ -63,6 +68,33 @@ def build_tools() -> list[Tool]:
                 "required": ["challenge_url"],
             },
             func=fetch_today_metrics,
+        ),
+        Tool(
+            name="fetch_recent_published_metrics",
+            description=(
+                "Fetch current reaction counts for Kiel's articles published in the last 3 days. "
+                "Call this every evening — reactions take 24-48h to accumulate so yesterday's "
+                "articles now have honest data. Flags high performers (5+ reactions) for "
+                "voice fingerprint update."
+            ),
+            parameters={"type": "object", "properties": {}, "required": []},
+            func=fetch_recent_published_metrics,
+        ),
+        Tool(
+            name="read_feed_article",
+            description=(
+                "Read the full body of a single article by its dev.to article ID. "
+                "Use this to extract the hook and quotable line from a high-performing article "
+                "before calling update_voice_fingerprint."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "article_id": {"type": "integer", "description": "dev.to article ID"},
+                },
+                "required": ["article_id"],
+            },
+            func=read_feed_article,
         ),
         Tool(
             name="read_memory",
