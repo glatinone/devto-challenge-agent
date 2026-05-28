@@ -6,6 +6,7 @@ anti-pattern scanning, and structured scoring — they don't generate content.
 """
 
 import json
+import os
 import re
 from datetime import date
 
@@ -79,6 +80,35 @@ _SOFT_HOOKS = [
     "if you're a developer",
 ]
 
+# ── Title validators ───────────────────────────────────────────────────────
+
+# Generic openers that signal zero curiosity gap
+_GENERIC_TITLE_RE = re.compile(
+    r"^(how (i|to|we|you)\s+|getting started with\b|a guide to\b|"
+    r"the (ultimate|complete|comprehensive) guide\b|introduction to\b|"
+    r"my (journey|experience|thoughts) (with|on|about)\b|"
+    r"top \d+\b|\d+ (best|ways to|tips for|reasons (to|why))\b|"
+    r"everything you need to know\b|what is\b|"
+    r"exploring\b|an? (beginner'?s?|overview of|deep.?dive into|look at)\b)",
+    re.IGNORECASE,
+)
+
+# The 5 formula patterns — at least one must be present
+_TITLE_FORMULA_PATTERNS = [
+    # A: Cost-Benefit Tension — temporal reversal (". Then", ". But")
+    re.compile(r"[.!,]\s*(then|but then|until)\b", re.IGNORECASE),
+    # B: Day-N Turning Point — specific day/week count
+    re.compile(r"\b(\d+\s+days?|day\s+\d+|\d+\s+weeks?|week\s+\d+)\b", re.IGNORECASE),
+    # C: Number Shock — dollar amount or percentage in title
+    re.compile(r"(\$[\d,]+|\d+[\s-]*%|^\d+\s)", re.IGNORECASE),
+    # D: Contrarian — opens with strong claim against convention
+    re.compile(r"^(stop\b|never\b|don'?t\b|quit\b|against\b|the case against\b|why you should (stop|never)\b)", re.IGNORECASE),
+    # E: Caught-Something — surfaced a hidden issue
+    re.compile(r"\b(caught|flagged|spotted|discovered|had missed|went unnoticed|been ignoring)\b", re.IGNORECASE),
+    # Bonus: "I Was Wrong" pattern
+    re.compile(r"\bi was wrong\b", re.IGNORECASE),
+]
+
 
 def _bullets_outside_fences(body: str) -> list[str]:
     """Return first 3 bullet-point lines found outside code fences."""
@@ -110,11 +140,14 @@ def _find_em_dashes(body: str) -> list[str]:
 
 def scan_draft(body: str, title: str = "") -> list[str]:
     """
-    Scan article body for anti-patterns. Returns a list of violation strings.
+    Scan article body AND title for anti-patterns. Returns a list of violation strings.
     Empty list means the draft is clean.
 
     Hard violations (must fix before publishing):
-    - Em dashes
+    - Title is generic (no curiosity gap formula)
+    - Title has no formula pattern match (A/B/C/D/E)
+    - Title over 80 characters
+    - Em dashes in body
     - Structural meta-labels written literally
     - Bullet points in body (outside code fences)
     - Signposting opener in first 300 chars
@@ -124,6 +157,39 @@ def scan_draft(body: str, title: str = "") -> list[str]:
     violations: list[str] = []
     body_lower = body.lower()
     opening = body_lower[:300]
+
+    # 0. Title checks (only if a title was provided)
+    if title:
+        title_stripped = title.strip()
+
+        # 0a. Length
+        if len(title_stripped) > 80:
+            violations.append(
+                f"[TITLE_TOO_LONG] Title is {len(title_stripped)} chars — max 80. "
+                f"Trim without losing the curiosity gap."
+            )
+
+        # 0b. Generic opener
+        if _GENERIC_TITLE_RE.match(title_stripped):
+            violations.append(
+                f"[TITLE_GENERIC] '{title_stripped[:70]}' — "
+                f"generic opener detected (How I / Getting Started / Guide / Top N). "
+                f"Use one of the 5 formula patterns: "
+                f"A=Cost-Benefit Tension, B=Day-N Turning Point, C=Number Shock, "
+                f"D=Contrarian, E=Caught-Something."
+            )
+
+        # 0c. No formula pattern matched — title has no curiosity gap
+        elif not any(p.search(title_stripped) for p in _TITLE_FORMULA_PATTERNS):
+            violations.append(
+                f"[TITLE_NO_FORMULA] '{title_stripped[:70]}' — "
+                f"no curiosity gap formula detected. Apply one of: "
+                f"A='X. Then Y.' (tension), "
+                f"B='N Days / Day N' (turning point), "
+                f"C='$X / N%' (number shock), "
+                f"D='Stop / Never / Don't' (contrarian), "
+                f"E='Caught / Flagged / Missed' (caught-something)."
+            )
 
     # 1. Em dashes
     em_contexts = _find_em_dashes(body)
@@ -243,6 +309,10 @@ def self_judge_draft(draft_path: str) -> str:
     """
     Read a saved draft from GitHub and score it on the rubric (0-40).
 
+    Uses a SEPARATE judge model (JUDGE_MODEL_NAME env var, default gpt-4o-mini)
+    so the writer and judge are different models. A model judging its own output
+    is systematically too lenient — a different model provides a more honest score.
+
     Returns a JSON string with:
     - scores per dimension (0-10 each)
     - composite (sum)
@@ -259,8 +329,15 @@ def self_judge_draft(draft_path: str) -> str:
     if not content:
         return f"Draft not found: {draft_path}"
 
+    # Use a dedicated judge model — separate from the writer model.
+    # JUDGE_MODEL_NAME defaults to gpt-4o-mini: faster, cheaper, and less
+    # biased toward the output of whatever model wrote the article.
+    judge_model = os.getenv("JUDGE_MODEL_NAME", "gpt-4o-mini")
+    judge_client = LLMClient(model=judge_model, temperature=0.2)
+
     try:
-        result = LLMClient().complete_json(build_judge_prompt(content), JUDGE_SYSTEM)
+        result = judge_client.complete_json(build_judge_prompt(content), JUDGE_SYSTEM)
+        result["judge_model"] = judge_model  # log which model judged
         return json.dumps(result, indent=2)
     except Exception as exc:
         return f"Error during judging: {exc}"
