@@ -11,6 +11,7 @@ from tools.challenge import find_current_challenge, fetch_challenge_feed, read_f
 from tools.github_tools import request_human_review, save_challenge_state
 from tools.backlog import add_topics, pop_topic, read_backlog
 from tools.memory import read_memory, read_voice_fingerprint, update_memory
+from tools.session import mark_reconnaissance_done, set_freeform_mode
 from tools.writing import self_judge_draft, write_and_save_draft
 
 _PASSING_SCORE = 30   # 30+ = solid. 32+ = top/week candidate. Target 32.
@@ -113,6 +114,8 @@ Workflow:
 5. Read the top 3-5 articles in FULL using read_feed_article (use IDs from feed output).
    For each article note: the hook style used, the angle taken, code shown, the conclusion drawn.
    This is reconnaissance — you need to know EXACTLY what's already been written, not just topics.
+   After reading at least 3 articles, call mark_reconnaissance_done(articles_read=N).
+   write_and_save_draft will REJECT until this is done — there is no skipping this step.
 6. Read memory — avoid saturated angles, lean into performing patterns
 7. For EACH of 2 unique articles (article_number=1, then article_number=2):
    a. Choose an angle that fills a real gap in what you just read. The angle must NOT overlap
@@ -130,9 +133,10 @@ Workflow:
 
 ── IF NO ACTIVE CHALLENGE WAS FOUND (freeform mode) ────────────────────────────────
 
-3. Call read_backlog — see available topic ideas
-4. Call pop_topic — claim the first topic (removes it so tomorrow's run gets a new one)
-5. Write 1 article on the claimed topic using the SAME quality standards as challenge mode:
+3. Call set_freeform_mode — this unlocks write_and_save_draft without requiring competitor recon
+4. Call read_backlog — see available topic ideas
+5. Call pop_topic — claim the first topic (removes it so tomorrow's run gets a new one)
+6. Write 1 article on the claimed topic using the SAME quality standards as challenge mode:
    — Same 6 required elements, same pre-save checklist, same scoring threshold
    — article_number=1
 6. Call self_judge_draft, iterate until composite >= {_PASSING_SCORE}
@@ -197,6 +201,35 @@ def build_tools() -> list[Tool]:
                 "required": ["article_id"],
             },
             func=read_feed_article,
+        ),
+        Tool(
+            name="mark_reconnaissance_done",
+            description=(
+                "Signal that you have finished reading competitor articles. "
+                "Call this AFTER read_feed_article at least 3 times. "
+                "write_and_save_draft will REJECT until this is called. "
+                "In challenge mode only — not needed in freeform mode."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "articles_read": {
+                        "type": "integer",
+                        "description": "Number of full articles read via read_feed_article (minimum 3)",
+                    },
+                },
+                "required": ["articles_read"],
+            },
+            func=mark_reconnaissance_done,
+        ),
+        Tool(
+            name="set_freeform_mode",
+            description=(
+                "Call this when no active challenge was found, BEFORE writing freeform articles. "
+                "Unlocks write_and_save_draft without requiring competitor reconnaissance."
+            ),
+            parameters={"type": "object", "properties": {}, "required": []},
+            func=lambda: set_freeform_mode() or "Freeform mode active. write_and_save_draft is now unlocked.",
         ),
         Tool(
             name="read_voice_fingerprint",
