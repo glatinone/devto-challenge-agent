@@ -13,6 +13,7 @@ from datetime import date
 from core.github_client import GitHubClient
 from core.llm import LLMClient
 from skills.devto_writer import JUDGE_SYSTEM, build_judge_prompt
+from tools.session import is_reconnaissance_done
 
 
 _MIN_WORDS = 800
@@ -256,13 +257,23 @@ def write_and_save_draft(
     Save a draft to GitHub at drafts/draft_YYYY-MM-DD_{article_number}.md.
 
     Pipeline:
-    1. Word count check (800 minimum)
-    2. Anti-pattern scan (em dashes, labels, bullets, signposting, forbidden phrases)
-    3. Save if both pass
+    1. Reconnaissance gate (must call mark_reconnaissance_done first)
+    2. Word count check (800 minimum)
+    3. Anti-pattern scan (em dashes, labels, bullets, signposting, title formula)
+    4. Save if all pass
     """
+    # Step 1: reconnaissance gate
+    if not is_reconnaissance_done():
+        return (
+            "DRAFT REJECTED — reconnaissance not completed. "
+            "You must call read_feed_article at least 3 times (reading competitor articles), "
+            "then call mark_reconnaissance_done(articles_read=N) before writing. "
+            "This prevents writing angles that already exist in the feed."
+        )
+
     word_count = len(body_markdown.split())
 
-    # Step 1: word count
+    # Step 2: word count
     if word_count < _MIN_WORDS:
         return (
             f"DRAFT REJECTED — too short: {word_count} words. "
