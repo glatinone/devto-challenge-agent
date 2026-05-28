@@ -9,9 +9,11 @@ import sys
 from datetime import date
 
 from agents.morning_agent import run as agent_run
+from tools.session import reset_session
 
 
 def run() -> str:
+    reset_session()  # clear any stale in-process state from previous runs
     print(f"[morning] {date.today()} — starting autonomous morning agent")
     summary = agent_run()
     print(f"[morning] Agent complete:\n{summary}")
