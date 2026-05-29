@@ -275,12 +275,44 @@ def write_and_save_draft(
 
     # Step 2: word count
     if word_count < _MIN_WORDS:
+        shortage = _MIN_WORDS - word_count
+        # Diagnose which sections are likely missing based on word count
+        missing = []
+        if word_count < 200:
+            missing.append("HOOK + WHAT I BUILT: barely started — write the opening 2 sections first")
+        if word_count < 500:
+            missing.append(
+                "CODE SECTION (missing or thin): add 2 real code blocks with real imports "
+                "and 2-3 sentences of explanation between them — aim for 200+ words here"
+            )
+        if word_count < 650:
+            missing.append(
+                "NARRATIVE ARC (missing or thin): add a specific failure moment "
+                "(exact timestamp/error/cost) + a specific aha moment — aim for 200+ words here"
+            )
+        if word_count < 750:
+            missing.append(
+                "META-LESSON (missing): add the generalizable principle + ONE quotable line "
+                "that stands alone without context — aim for 100+ words here"
+            )
+        if word_count < _MIN_WORDS:
+            missing.append(
+                "CLOSING QUESTION (missing): dual-prompt + author stake — "
+                "'If you had to automate one thing, what would it be — and what would you never automate?'"
+            )
+
+        sections_text = "\n".join(f"  - {m}" for m in missing) if missing else \
+            "  - All sections seem present but too thin — expand each with more specific detail"
+
         return (
-            f"DRAFT REJECTED — too short: {word_count} words. "
-            f"Minimum is {_MIN_WORDS} words. "
-            f"Rewrite with {_MIN_WORDS - word_count} more words of real substance: "
-            f"a failure moment, real code, specific numbers, a quotable line. "
-            f"Do NOT add filler sentences. Add substance."
+            f"DRAFT REJECTED — {word_count} words, need {_MIN_WORDS}. "
+            f"Missing ~{shortage} words.\n\n"
+            f"DO NOT rewrite from scratch. EXPAND the existing draft by adding these missing pieces:\n"
+            f"{sections_text}\n\n"
+            f"An 800-word article has roughly: hook (80w) + what I built (100w) + "
+            f"2 code blocks with explanation (200w) + narrative arc failure+aha (200w) + "
+            f"meta-lesson+quotable line (120w) + closing question (60w) = ~760w minimum.\n"
+            f"Write the MISSING SECTIONS, then retry."
         )
 
     # Step 2: anti-pattern scan
