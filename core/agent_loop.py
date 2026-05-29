@@ -129,8 +129,16 @@ class AgentLoop:
                     break  # success
                 except Exception as exc:
                     err_str = str(exc).lower()
+                    # Only retry transient rate limits (TPM/RPM exceeded).
+                    # Do NOT retry billing quota errors — those need a human to add credits.
+                    is_billing_cap = (
+                        "insufficient_quota" in err_str
+                        or "exceeded your current quota" in err_str
+                        or "billing" in err_str
+                    )
                     is_rate_limit = (
-                        "rate_limit" in err_str or "rate limit" in err_str or "429" in err_str
+                        not is_billing_cap
+                        and ("rate_limit" in err_str or "rate limit" in err_str or "429" in err_str)
                     )
                     if is_rate_limit and api_attempt < _MAX_API_RETRIES - 1:
                         wait = min(90, 10 * (2 ** api_attempt))
@@ -140,6 +148,8 @@ class AgentLoop:
                         )
                         time.sleep(wait)
                     else:
+                        if is_billing_cap:
+                            print("[agent] ✖ OpenAI billing quota exceeded — add credits at platform.openai.com/account/billing")
                         raise
             choice = response.choices[0]
 
@@ -240,8 +250,14 @@ class AgentLoop:
                     break  # success
                 except Exception as exc:
                     err_str = str(exc).lower()
+                    is_billing_cap = (
+                        "insufficient_quota" in err_str
+                        or "exceeded your current quota" in err_str
+                        or "billing" in err_str
+                    )
                     is_rate_limit = (
-                        "rate_limit" in err_str or "rate limit" in err_str or "429" in err_str
+                        not is_billing_cap
+                        and ("rate_limit" in err_str or "rate limit" in err_str or "429" in err_str)
                     )
                     if is_rate_limit and api_attempt < _MAX_API_RETRIES - 1:
                         wait = min(90, 10 * (2 ** api_attempt))
@@ -251,6 +267,8 @@ class AgentLoop:
                         )
                         time.sleep(wait)
                     else:
+                        if is_billing_cap:
+                            print("[agent] ✖ Anthropic billing quota exceeded — check your plan")
                         raise
 
             # Serialize content blocks for the next request
