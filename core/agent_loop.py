@@ -14,6 +14,7 @@ Key behaviors:
 
 import json
 import os
+import time
 from dataclasses import dataclass
 from typing import Callable
 
@@ -108,17 +109,38 @@ class AgentLoop:
         continuation_count = 0      # consecutive text responses after a rejection
 
         for iteration in range(self.max_iterations):
-            response = client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                tools=tool_defs,
-                tool_choice="auto",
-                max_tokens=self.max_tokens,
-                # Force sequential tool calls so each write_and_save_draft
-                # gets the full token budget instead of splitting it across
-                # two simultaneous article writes.
-                parallel_tool_calls=False,
-            )
+            # Retry with exponential backoff on rate limit errors (e.g. OpenAI TPM exceeded).
+            # Waits: 10s, 20s, 40s, 80s, 90s across 5 attempts — enough for a TPM window reset.
+            response = None
+            _MAX_API_RETRIES = 5
+            for api_attempt in range(_MAX_API_RETRIES):
+                try:
+                    response = client.chat.completions.create(
+                        model=self.model,
+                        messages=messages,
+                        tools=tool_defs,
+                        tool_choice="auto",
+                        max_tokens=self.max_tokens,
+                        # Force sequential tool calls so each write_and_save_draft
+                        # gets the full token budget instead of splitting it across
+                        # two simultaneous article writes.
+                        parallel_tool_calls=False,
+                    )
+                    break  # success
+                except Exception as exc:
+                    err_str = str(exc).lower()
+                    is_rate_limit = (
+                        "rate_limit" in err_str or "rate limit" in err_str or "429" in err_str
+                    )
+                    if is_rate_limit and api_attempt < _MAX_API_RETRIES - 1:
+                        wait = min(90, 10 * (2 ** api_attempt))
+                        print(
+                            f"[agent] ⚠ Rate limit hit — waiting {wait}s "
+                            f"(attempt {api_attempt + 1}/{_MAX_API_RETRIES})"
+                        )
+                        time.sleep(wait)
+                    else:
+                        raise
             choice = response.choices[0]
 
             # Build serializable assistant message
@@ -203,13 +225,33 @@ class AgentLoop:
         continuation_count = 0
 
         for iteration in range(self.max_iterations):
-            response = client.messages.create(
-                model=self.model,
-                max_tokens=self.max_tokens,
-                system=self.system,
-                messages=messages,
-                tools=tool_defs,
-            )
+            # Retry with exponential backoff on rate limit errors.
+            response = None
+            _MAX_API_RETRIES = 5
+            for api_attempt in range(_MAX_API_RETRIES):
+                try:
+                    response = client.messages.create(
+                        model=self.model,
+                        max_tokens=self.max_tokens,
+                        system=self.system,
+                        messages=messages,
+                        tools=tool_defs,
+                    )
+                    break  # success
+                except Exception as exc:
+                    err_str = str(exc).lower()
+                    is_rate_limit = (
+                        "rate_limit" in err_str or "rate limit" in err_str or "429" in err_str
+                    )
+                    if is_rate_limit and api_attempt < _MAX_API_RETRIES - 1:
+                        wait = min(90, 10 * (2 ** api_attempt))
+                        print(
+                            f"[agent] ⚠ Rate limit hit — waiting {wait}s "
+                            f"(attempt {api_attempt + 1}/{_MAX_API_RETRIES})"
+                        )
+                        time.sleep(wait)
+                    else:
+                        raise
 
             # Serialize content blocks for the next request
             content_blocks = []
