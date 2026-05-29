@@ -301,18 +301,24 @@ def write_and_save_draft(
                 "'If you had to automate one thing, what would it be — and what would you never automate?'"
             )
 
-        sections_text = "\n".join(f"  - {m}" for m in missing) if missing else \
-            "  - All sections seem present but too thin — expand each with more specific detail"
-
         return (
-            f"DRAFT REJECTED — {word_count} words, need {_MIN_WORDS}. "
-            f"Missing ~{shortage} words.\n\n"
-            f"DO NOT rewrite from scratch. EXPAND the existing draft by adding these missing pieces:\n"
-            f"{sections_text}\n\n"
-            f"An 800-word article has roughly: hook (80w) + what I built (100w) + "
-            f"2 code blocks with explanation (200w) + narrative arc failure+aha (200w) + "
-            f"meta-lesson+quotable line (120w) + closing question (60w) = ~760w minimum.\n"
-            f"Write the MISSING SECTIONS, then retry."
+            f"DRAFT REJECTED — {word_count} words, need {_MIN_WORDS}. Missing ~{shortage} words.\n\n"
+            f"WRITE THE COMPLETE ARTICLE FRESH in one pass, hitting ALL 6 sections below.\n"
+            f"Do NOT patch the previous draft — write the whole thing from the opening sentence.\n\n"
+            f"REQUIRED SECTIONS WITH WORD TARGETS (total 800-1200 words):\n"
+            f"  1. HOOK (80-100w): Specific moment or number. First sentence must name a real cost,\n"
+            f"     failure, or timestamp. NOT 'Have you ever' or 'GitHub is powerful'.\n"
+            f"  2. WHAT I BUILT (100-120w): 2-4 sentences naming the tool/workflow plainly.\n"
+            f"  3. CODE SECTION (200-250w): TWO real code blocks with real imports and real API\n"
+            f"     syntax. 2-3 sentences of explanation between them. No pseudocode.\n"
+            f"  4. NARRATIVE ARC (200-250w): One specific failure moment (exact error/cost/timestamp)\n"
+            f"     then one aha moment. Real names, real numbers throughout.\n"
+            f"  5. META-LESSON (120-150w): The generalizable principle. ONE quotable standalone line.\n"
+            f"     ONE bold claim backed by evidence in the article.\n"
+            f"  6. CLOSING QUESTION (60-80w): Dual-prompt + author stake.\n"
+            f"     'If you had to automate one thing, what would it be — and what would you never\n"
+            f"     automate? The most interesting answer I'll build as my next post and credit you.'\n\n"
+            f"Write ALL 6 sections now, then call write_and_save_draft."
         )
 
     # Step 2: anti-pattern scan
